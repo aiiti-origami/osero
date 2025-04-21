@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScriptオセロ</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 2px solid #333;
+            margin: 20px auto;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: #8fbc8f;
+            border: 1px solid #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .disc {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .black {
+            background-color: #333;
+        }
+
+        .white {
+            background-color: #fff;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>オセロ</h1>
+        <div id="board" class="board">
+        </div>
+        <p id="message"></p>
+    </div>
+
+    <script>
+        const boardElement = document.getElementById('board');
+        const messageElement = document.getElementById('message');
+        const boardSize = 8;
+        let board = [];
+        let currentPlayer = 'black';
+        let canPlayerMove = true; // プレイヤーが操作可能かどうか
+
+        function initializeBoard() {
+            board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(null));
+            board[3][3] = 'white';
+            board[3][4] = 'black';
+            board[4][3] = 'black';
+            board[4][4] = 'white';
+            canPlayerMove = true;
+        }
+
+        function createBoardElement() {
+            boardElement.innerHTML = '';
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', handleCellClick);
+                    renderDisc(cell, board[i][j]);
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+
+        function renderDisc(cell, color) {
+            cell.innerHTML = '';
+            if (color) {
+                const disc = document.createElement('div');
+                disc.classList.add('disc', color);
+                cell.appendChild(disc);
+            }
+        }
+
+        function handleCellClick(event) {
+            if (currentPlayer === 'black' && canPlayerMove) { // 黒のターンで操作可能な場合のみ処理
+                const row = parseInt(event.target.dataset.row);
+                const col = parseInt(event.target.dataset.col);
+
+                if (board[row][col] === null && isValidMove(row, col, currentPlayer)) {
+                    placeDisc(row, col, currentPlayer);
+                    flipDiscs(row, col, currentPlayer);
+                    currentPlayer = 'white';
+                    updateBoard();
+                    canPlayerMove = false; // プレイヤーの操作を禁止
+
+                    if (!isGameOver() && canMove('white')) {
+                        setTimeout(makeAiMove, 1000);
+                    } else if (isGameOver()) {
+                        // ゲーム終了処理は updateBoard で行う
+                    } else if (!canMove('white')) {
+                        currentPlayer = 'black';
+                        canPlayerMove = true;
+                        updateBoard(); // パスして黒のターンに戻る
+                    }
+                }
+            }
+        }
+
+        function isValidMove(row, col, player) {
+            const opponent = player === 'black' ? 'white' : 'black';
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1],
+                [-1, -1], [-1, 1], [1, -1], [1, 1]
+            ];
+
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let foundOpponent = false;
+
+                while (r >= 0 && r < boardSize && c >= 0 && c < boardSize && board[r][c] === opponent) {
+                    foundOpponent = true;
+                    r += dr;
+                    c += dc;
+                }
+
+                if (foundOpponent && r >= 0 && r < boardSize && c >= 0 && c < boardSize && board[r][c] === player) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function placeDisc(row, col, player) {
+            board[row][col] = player;
+        }
+
+        function flipDiscs(row, col, player) {
+            const opponent = player === 'black' ? 'white' : 'black';
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1],
+                [-1, -1], [-1, 1], [1, -1], [1, 1]
+            ];
+
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let discsToFlip = [];
+
+                while (r >= 0 && r < boardSize && c >= 0 && c < boardSize && board[r][c] === opponent) {
+                    discsToFlip.push([r, c]);
+                    r += dr;
+                    c += dc;
+                }
+
+                if (r >= 0 && r < boardSize && c >= 0 && c < boardSize && board[r][c] === player) {
+                    discsToFlip.forEach(([flipR, flipC]) => {
+                        board[flipR][flipC] = player;
+                    });
+                }
+            }
+        }
+
+        function updateBoard() {
+            createBoardElement();
+            displayCurrentPlayer();
+            if (isGameOver()) {
+                displayWinner();
+                canPlayerMove = false; // ゲーム終了後は操作不可
+            } else if (!canMove(currentPlayer)) {
+                const nextPlayer = currentPlayer === 'black' ? 'white' : 'black';
+                displayMessage(`${currentPlayer === 'black' ? '黒' : '白'}は置ける場所がありません。${nextPlayer === 'black' ? '黒' : '白'}の番です。`);
+                currentPlayer = nextPlayer;
+                canPlayerMove = currentPlayer === 'black'; // 自分の番なら操作可能
+                if (currentPlayer === 'white' && !isGameOver() && canMove('white')) {
+                    setTimeout(makeAiMove, 1000);
+                } else if (isGameOver()) {
+                    displayWinner();
+                    canPlayerMove = false;
+                } else if (!canMove(currentPlayer)) {
+                    displayWinner(); // 両者とも置けない場合
+                    canPlayerMove = false;
+                }
+            } else {
+                canPlayerMove = currentPlayer === 'black'; // 通常のターン交代
+            }
+        }
+
+        function displayCurrentPlayer() {
+            messageElement.textContent = `${currentPlayer === 'black' ? '黒' : '白'}の番です`;
+        }
+
+        function displayMessage(message) {
+            messageElement.textContent = message;
+        }
+
+        function canMove(player) {
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    if (board[i][j] === null && isValidMove(i, j, player)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function isGameOver() {
+            return !canMove('black') && !canMove('white');
+        }
+
+        function displayWinner() {
+            let blackCount = 0;
+            let whiteCount = 0;
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    if (board[i][j] === 'black') {
+                        blackCount++;
+                    } else if (board[i][j] === 'white') {
+                        whiteCount++;
+                    }
+                }
+            }
+
+            if (blackCount > whiteCount) {
+                displayMessage(`黒の勝ち！ (黒: ${blackCount} - 白: ${whiteCount})`);
+            } else if (whiteCount > blackCount) {
+                displayMessage(`白の勝ち！ (黒: ${blackCount} - 白: ${whiteCount})`);
+            } else {
+                displayMessage(`引き分け！ (黒: ${blackCount} - 白: ${whiteCount})`);
+            }
+        }
+
+        function makeAiMove() {
+            if (currentPlayer === 'white' && !isGameOver()) {
+                const possibleMoves = [];
+                for (let i = 0; i < boardSize; i++) {
+                    for (let j = 0; j < boardSize; j++) {
+                        if (board[i][j] === null && isValidMove(i, j, 'white')) {
+                            possibleMoves.push({ row: i, col: j });
+                        }
+                    }
+                }
+
+                if (possibleMoves.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * possibleMoves.length);
+                    const { row, col } = possibleMoves[randomIndex];
+                    placeDisc(row, col, 'white');
+                    flipDiscs(row, col, 'white');
+                    currentPlayer = 'black';
+                    canPlayerMove = true; // AIのターン終了後、プレイヤーは操作可能
+                    updateBoard();
+                } else {
+                    // AIが置ける場所がない場合、パスする
+                    currentPlayer = 'black';
+                    canPlayerMove = true; // パス後、プレイヤーは操作可能
+                    updateBoard();
+                }
+            }
+        }
+
+        initializeBoard();
+        createBoardElement();
+        displayCurrentPlayer();
+    </script>
+</body>
+</html>
